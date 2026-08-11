@@ -1,20 +1,31 @@
 version: '3.8'
 
 services:
-  redis:
-    image: redis/redis-stack-server:latest
-    container_name: finsight-redis
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     ports:
-      - "6379:6379"
-    volumes:
-      - finsight_redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - "8000:8000"
+    env_file:
+      - .env  # Injects your Groq/Pinecone API keys into the backend
+    networks:
+      - finsight-network
 
-volumes:
-  finsight_redis_data:
-    driver: local
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    ports:
+      - "8501:8501"
+    environment:
+      # Tells the UI container to route traffic to the API container
+      - API_BASE_URL=http://api:8000/api/v1 
+    depends_on:
+      - api
+    networks:
+      - finsight-network
+
+networks:
+  finsight-network:
+    driver: bridge

@@ -1,9 +1,12 @@
 # app.py
 import streamlit as st
 import requests
+import os
+
 
 # URL of our new FastAPI Backend
 API_BASE_URL = "http://localhost:8000/api/v1"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
 
 st.set_page_config(page_title="FinSight | AI Credit Underwriter", page_icon="🏦", layout="wide")
 st.title("🏦 FinSight: AI Credit Underwriter & Copilot")

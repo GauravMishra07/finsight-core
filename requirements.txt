@@ -16,3 +16,6 @@ sentence-transformers
 langchain-huggingface
 streamlit
 fastapi
+duckduckgo-search
+pydantic
+langchain-text-splitters
