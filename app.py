@@ -14,7 +14,7 @@ st.title("🏦 FinSight: AI Credit Underwriter & Copilot")
 
 AVAILABLE_STOCKS = {
     "MSFT": "Microsoft", "AAPL": "Apple", "NVDA": "Nvidia", "TSLA": "Tesla",
-    "JPM": "JPMorgan Chase", "HDB": "HDFC Bank", "INFY": "Infosys"
+    "JPM": "JPMorgan Chase"
 }
 
 with st.sidebar:
