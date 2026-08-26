@@ -9,6 +9,8 @@ class Settings:
     """Centralized configuration for FinSight environment variables."""
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     pinecone_api_key: str = os.getenv("PINECONE_API_KEY", "")
+
+    huggingface_api_key: str = os.getenv("HUGGINGFACE_API_KEY", "")
     
     # Defaulting to finsight-enterprise as discussed, but falls back to .env if set
     pinecone_index_name: str = os.getenv("PINECONE_INDEX_NAME", "finsight-enterprise")

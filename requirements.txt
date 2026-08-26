@@ -12,10 +12,11 @@ edgartools
 polars
 python-multipart
 python-jose[cryptography]
-sentence-transformers 
 langchain-huggingface
 streamlit
 fastapi
 duckduckgo-search
 pydantic
 langchain-text-splitters
+beautifulsoup4
+python-dotenv
