@@ -46,7 +46,7 @@ FinSight operates using a directed acyclic graph (DAG) of specialized AI agents.
 **Backend & AI Pipeline:**
 * **Graph Orchestration:** [LangGraph](https://python.langchain.com/docs/langgraph)
 * **API Layer:** [FastAPI](https://fastapi.tiangolo.com/) & Uvicorn
-* **LLM Engine:** [Groq](https://groq.com/) (Llama-3.3-70b-versatile)
+* **LLM Engine:** [Groq](https://groq.com/) (openai/gpt-oss-120b)
 * **Vector Database:** [Pinecone](https://www.pinecone.io/) (Serverless)
 * **Embeddings:** HuggingFace (`sentence-transformers`)
 * **Financial Data Engine:** SEC `edgartools`
