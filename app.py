@@ -2,7 +2,8 @@
 import streamlit as st
 import requests
 import os
-
+#uvicorn api:app --reload --port 8000 for running backend in 1st terminal
+#streamlit run app.py for running the frontend in the 2nd terminal
 
 # URL of our new FastAPI Backend
 API_BASE_URL = "http://localhost:8000/api/v1"
