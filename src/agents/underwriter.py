@@ -36,6 +36,10 @@ def underwriter_node(state: AgentState) -> dict:
     prompt = f"""
     You are the Lead Credit Officer for an enterprise commercial bank.
     Your analysts have provided you with reports on {ticker}. You need to synthesize these into a final Credit Underwriting Memo.
+    CRITICAL GROUNDING RULES:
+    1. Base every finding STRICTLY on the facts, metrics, and segments explicitly stated in the provided SEC Context.
+    2. DO NOT extrapolate, assume, or bring in external knowledge about the company's other products or divisions (e.g., gaming, personal computing) unless directly mentioned in the excerpt.
+    3. If an aspect is not documented in the context, explicitly state that it is not covered.
 
     Inputs from your team:
     ---

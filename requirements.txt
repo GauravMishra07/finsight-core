@@ -21,3 +21,7 @@ beautifulsoup4
 python-dotenv
 langchain-pinecone
 pinecone-client
+ragas
+datasets
+#langchain-openai
+langchain-groq
