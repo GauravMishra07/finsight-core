@@ -87,3 +87,7 @@ finsight-core/
 ├── docker-compose.yml      # Multi-container orchestration
 ├── requirements.txt        # Python dependencies
 └── .env                    # Secret API keys (DO NOT COMMIT)
+
+
+## RUN BACKEND uvicorn api:app --reload --port 8000  
+## RUN FRONTEND :python -m streamlit run app.py        

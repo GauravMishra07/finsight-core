@@ -1,30 +1,28 @@
 # src/rag/embedder.py
-from langchain_huggingface import HuggingFaceEndpointEmbeddings
+from langchain_pinecone import PineconeEmbeddings
 from typing import List
 from config.settings import settings
 from config.logger import setup_logger
+import os
 
 logger = setup_logger(__name__)
 
 class Embedder:
     """
-    Generates vector embeddings for text chunks using HuggingFace Inference API.
+    Generates vector embeddings for text chunks using Pinecone Serverless Inference.
     """
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
-        logger.info(f"Connecting to HuggingFace API for embedding model: {model_name}...")
+    def __init__(self, model_name: str = "multilingual-e5-large"):
+        logger.info(f"Connecting to Pinecone Inference API for model: {model_name}...")
         
-        # Use settings instead of os.getenv
-        hf_token = settings.huggingface_api_key
-        
-        if not hf_token:
-            logger.warning("HUGGINGFACE_API_KEY environment variable not found. API calls may fail.")
+        # LangChain's Pinecone integration expects the API key in the environment
+        if not os.getenv("PINECONE_API_KEY"):
+            os.environ["PINECONE_API_KEY"] = settings.pinecone_api_key
             
-        self.embeddings = HuggingFaceEndpointEmbeddings(
-            model=model_name,
-            task="feature-extraction",
-            huggingfacehub_api_token=hf_token
-        )
-        logger.info("Embedding model API connected successfully.")
+        if not settings.pinecone_api_key:
+            logger.warning("PINECONE_API_KEY environment variable not found. Embeddings will fail.")
+            
+        self.embeddings = PineconeEmbeddings(model=model_name)
+        logger.info("Pinecone Embedding model connected successfully.")
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Embeds a list of text chunks for database insertion."""
