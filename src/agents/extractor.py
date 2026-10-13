@@ -9,51 +9,59 @@ from config.logger import setup_logger
 logger = setup_logger(__name__)
 
 def extractor_node(state: AgentState) -> dict:
-    """
-    Node 1: Extractor Agent
-    Fetches the 10-K, chunks it, embeds it, and stores it in the multi-tenant vector DB.
-    """
     ticker = state.get("ticker")
-    tenant_id = state.get("tenant_id")
-    
-    logger.info(f"[Extractor Agent] Starting data pipeline for {ticker} (Tenant: {tenant_id})")
-    
-    # 1. Fetch Data
-    raw_text = edgar_client.fetch_latest_10k_text(ticker)
-    
-    if not raw_text:
-        error_msg = f"Extractor Failed: Could not retrieve 10-K filing for {ticker}."
-        logger.error(error_msg)
-        # LangGraph automatically appends this to the 'errors' list based on our state.py logic
-        return {"errors": [error_msg], "filing_chunks_indexed": False}
-    
-    # 2. Chunk, Embed, and Index
+    logger.info(f"[Extractor Agent] Starting data pipeline for {ticker}")
+
+    # 1. Cheap lookup: which filing is the latest?
     try:
-        logger.info(f"[Extractor Agent] Chunking {len(raw_text)} characters...")
-        chunks = chunker.chunk_text(raw_text)
-        
-        logger.info(f"[Extractor Agent] Generating embeddings for {len(chunks)} chunks. (This may take a moment locally)...")
-        embeddings = embedder.embed_documents(chunks)
-        
-        logger.info(f"[Extractor Agent] Upserting {len(chunks)} vectors to Pinecone (Namespace: {tenant_id})")
-        vector_store.upsert_chunks(
-            tenant_id=tenant_id,
-            document_id=f"{ticker}_10K",
-            chunks=chunks,
-            embeddings=embeddings
-        )
-        
-        logger.info("[Extractor Agent] Extraction and indexing complete.")
-        
-        # 3. Update the shared state
-        return {
-            # We store only the first 50,000 characters in active memory to prevent 
-            # blowing up the LLM's context window. Full data is safely in Pinecone.
-            "raw_filing_text": raw_text[:50000], 
-            "filing_chunks_indexed": True
-        }
-        
+        company, filing = edgar_client.get_latest_10k_filing(ticker)
     except Exception as e:
-        error_msg = f"Extractor Failed during chunking/embedding pipeline: {str(e)}"
-        logger.error(error_msg)
-        return {"errors": [error_msg], "filing_chunks_indexed": False}
+        msg = f"Extractor Failed: could not resolve {ticker}: {e}"
+        logger.error(msg)
+        return {"errors": [msg], "filing_chunks_indexed": False}
+
+    if filing is None:
+        msg = f"Extractor Failed: no 10-K found for {ticker}."
+        logger.error(msg)
+        return {"errors": [msg], "filing_chunks_indexed": False}
+
+    accession = filing.accession_no
+    namespace = f"{ticker.upper()}__{accession}"
+    document_id = f"{ticker.upper()}_{accession}" 
+
+    # 2. Cache hit: this exact filing is already embedded
+    if vector_store.has_document(namespace, document_id):
+        logger.info(f"[Extractor Agent] Cache hit for {namespace}. Skipping download and embedding.")
+        return {"tenant_id": namespace, "filing_chunks_indexed": True}
+
+    # 3. Cache miss: do the full pipeline
+    raw_text = edgar_client.get_filing_text(filing)
+    if not raw_text:
+        msg = f"Extractor Failed: could not retrieve 10-K text for {ticker}."
+        logger.error(msg)
+        return {"errors": [msg], "filing_chunks_indexed": False}
+
+    try:
+        chunks = chunker.chunk_text(raw_text)
+        embeddings = embedder.embed_documents(chunks)
+        vector_store.upsert_chunks(
+            tenant_id=namespace,
+            document_id=document_id,
+            chunks=chunks,
+            embeddings=embeddings,
+        )
+        logger.info("[Extractor Agent] Extraction and indexing complete.")
+        return {
+            "tenant_id": namespace,
+            "raw_filing_text": raw_text[:50000],
+            "filing_chunks_indexed": True,
+        }
+    except Exception as e:
+        logger.exception("Extractor pipeline failed")
+        # Don't leave a half-filled namespace that a later request would mistake for a cache hit
+        try:
+            vector_store.delete_namespace(namespace)
+        except Exception:
+            pass
+        return {"errors": [f"Extractor Failed during chunking/embedding pipeline: {e}"],
+                "filing_chunks_indexed": False}

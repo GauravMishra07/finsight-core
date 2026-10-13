@@ -14,7 +14,7 @@ python-multipart
 python-jose[cryptography]
 streamlit
 fastapi
-duckduckgo-search
+#duckduckgo-search
 pydantic
 langchain-text-splitters
 beautifulsoup4
@@ -25,3 +25,4 @@ ragas
 datasets
 #langchain-openai
 langchain-groq
+ddgs

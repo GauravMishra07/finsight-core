@@ -6,7 +6,8 @@ from config.settings import settings
 from config.logger import setup_logger
 from groq import Groq
 import json
-from duckduckgo_search import DDGS
+#from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 logger = setup_logger(__name__)
 client = Groq(api_key=settings.groq_api_key)
@@ -67,11 +68,27 @@ def macro_reviewer_node(state: AgentState) -> dict:
             temperature=0.3 
         )
         
-        result = json.loads(response.choices[0].message.content)
+        raw = json.loads(response.choices[0].message.content)
+
+        # Normalize: model may return [ {...} ] or something unexpected
+        if isinstance(raw, list):
+            raw = next((x for x in raw if isinstance(x, dict)), {})
+        if not isinstance(raw, dict):
+            raw = {}
+
+        def as_text(v, default):
+            if not v:
+                return default
+            if isinstance(v, list):
+                return "\n".join(f"- {i}" if isinstance(i, str) else f"- {json.dumps(i)}" for i in v)
+            if isinstance(v, dict):
+                return json.dumps(v, indent=2)
+            return str(v)
+
         return {
-            "macro_analysis": result.get("macro_analysis", "Not available."),
-            "competitor_analysis": result.get("competitors", "No competitor data found."),
-            "upcoming_projects": result.get("projects", "No project data found.")
+            "macro_analysis": as_text(raw.get("macro_analysis"), "Not available."),
+            "competitor_analysis": as_text(raw.get("competitors"), "No competitor data found."),
+            "upcoming_projects": as_text(raw.get("projects"), "No project data found."),
         }
     except Exception as e:
         return {"errors": [f"Macro Reviewer Failed: {str(e)}"]}

@@ -89,5 +89,31 @@ class EdgarDataClient:
             logger.error(f"Failed to fetch 10-K for {ticker_or_name}: {str(e)}")
             return None
 
+
+    def get_latest_10k_filing(self, ticker_or_name: str):
+        """Cheap call: returns (company, filing) without downloading the document body."""
+        company = self.resolve_company(ticker_or_name)
+        filings = company.get_filings(form="10-K")
+        if not filings:
+            return company, None
+        return company, filings[0]
+
+    def get_filing_text(self, filing) -> Optional[str]:
+        """Expensive call: download + parse. Your existing truncation logic goes here."""
+        try:
+            text_content = filing.text()
+            original_len = len(text_content)
+            MAX_CHARS = 480_000
+            if original_len > MAX_CHARS:
+                text_content = text_content[:MAX_CHARS]
+                logger.info(f"Truncated filing from {original_len} to {MAX_CHARS} characters.")
+            else:
+                logger.info(f"Successfully retrieved 10-K ({original_len} characters).")
+            gc.collect()
+            return text_content
+        except Exception as e:
+            logger.error(f"Failed to parse filing: {e}")
+            return None
+
 # Singleton instance to be injected into the MCP server
 edgar_client = EdgarDataClient()

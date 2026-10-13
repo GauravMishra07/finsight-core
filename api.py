@@ -13,6 +13,9 @@ from src.rag.embedder import embedder
 from src.rag.vector_store import vector_store
 from config.settings import settings
 from groq import Groq
+from config.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 app = FastAPI(title="FinSight Underwriting API")
 client = Groq(api_key=settings.groq_api_key)
@@ -51,13 +54,14 @@ async def generate_memo(request: AnalyzeRequest):
         
         # Run LangGraph pipeline
         final_state = finsight_graph.invoke(initial_state)
-        
-        if final_state.get("errors"):
-            raise HTTPException(status_code=500, detail=str(final_state["errors"]))
-            
-        return final_state
+
+        if not final_state.get("final_memo"):
+            raise HTTPException(status_code=500, detail=str(final_state.get("errors")))
+
+        return final_state  # includes "errors" so the UI can show them as warnings
     
     except Exception as e:
+        logger.exception("Analyze pipeline failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/chat")
@@ -105,4 +109,5 @@ async def chat_assistant(request: ChatRequest):
         return {"answer": response.choices[0].message.content}
 
     except Exception as e:
+        logger.exception("Chat pipeline failed")
         raise HTTPException(status_code=500, detail=str(e))
