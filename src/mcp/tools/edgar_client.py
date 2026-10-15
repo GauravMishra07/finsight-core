@@ -1,119 +1,154 @@
-
 # src/mcp/tools/edgar_client.py
+import os
 import gc
-from edgar import set_identity, Company, find
-import polars as pl
+import re
+import time
 from typing import Optional
+
+from edgar import set_identity, Company, find
 from config.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+MAX_CHARS = 480_000      # cap to protect Render's 512 MB
+MIN_CHARS = 50_000       # real 10-Ks are far larger; rejects partial amendments
+
+
+def _strip_html(html: str) -> str:
+    html = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", html)
+    text = re.sub(r"(?s)<[^>]+>", " ", html)
+    return re.sub(r"\s+", " ", text)
+
+
 class EdgarDataClient:
-    """
-    Enterprise client for streaming live SEC EDGAR regulatory data.
-    """
-    def __init__(self, identity: str = "FinSight Agentic RAG (admin@finsight.local)"):
+    """Client for SEC EDGAR filing lookups and text extraction."""
+
+    def __init__(self, identity: Optional[str] = None):
         """
-        Initializes the SEC EDGAR client.
-        The SEC strictly requires a declared identity (Name + Email) to prevent rate-limiting.
+        SEC requires a declared identity (Name + real email).
+        Set EDGAR_IDENTITY in your .env and on Render.
         """
+        identity = identity or os.environ.get(
+            "EDGAR_IDENTITY", "FinSight Agentic RAG (admin@finsight.local)"
+        )
         try:
             set_identity(identity)
             logger.info(f"Initialized SEC EDGAR client with identity: {identity}")
         except Exception as e:
-            logger.error(f"Failed to set EDGAR identity: {str(e)}")
+            logger.error(f"Failed to set EDGAR identity: {e}")
             raise
 
     def resolve_company(self, identifier: str) -> Company:
-        """
-        Resolves a ticker, CIK, or company name to a valid SEC Company object.
-        """
-        clean_identifier = identifier.strip()
-        
-        # 1. First attempt: Direct lookup by ticker or CIK
+        clean = identifier.strip()
         try:
-            company = Company(clean_identifier.upper())
+            company = Company(clean.upper())
             if company and company.name:
                 return company
         except Exception:
             pass
 
-        # 2. Fallback: Search SEC registry by company name
         try:
-            search_results = find(clean_identifier)
-            if search_results and len(search_results) > 0:
-                return search_results[0]
+            results = find(clean)
+            if results and len(results) > 0:
+                return results[0]
         except Exception as e:
-            logger.error(f"Error during fallback SEC search for '{clean_identifier}': {e}")
+            logger.error(f"Error during fallback SEC search for '{clean}': {e}")
 
-        raise ValueError(f"No SEC registered company found for '{clean_identifier}'.")
-
-    def fetch_latest_10k_text(self, ticker_or_name: str) -> Optional[str]:
-        """
-        Streams the most recent annual 10-K filing for a given ticker or company name.
-        """
-        try:
-            logger.info(f"Resolving SEC entity for input: {ticker_or_name}")
-            company = self.resolve_company(ticker_or_name)
-            logger.info(f"Resolved to company: {company.name}")
-            
-            # Retrieve the filing history filtered by 10-K
-            filings = company.get_filings(form="10-K")
-            
-            if not filings:
-                logger.warning(f"No 10-K filings found for {company.name}")
-                return None
-            
-            # Grab the absolute latest filing
-            latest_10k = filings[0]
-            
-            # Stream the plain text parsing
-            text_content = latest_10k.text()
-            original_len = len(text_content)
-            
-            # --- MEMORY OPTIMIZATION FOR RENDER FREE TIER ---
-            # Cap plain text characters to ~350,000 (~55,000 words)
-            MAX_CHARS = 480_000
-            if original_len > MAX_CHARS:
-                text_content = text_content[:MAX_CHARS]
-                logger.info(f"Truncated filing from {original_len} to {MAX_CHARS} characters to prevent OOM.")
-            else:
-                logger.info(f"Successfully retrieved 10-K ({original_len} characters).")
-                
-            # Immediately force garbage collection to free unused DOM/Regex memory
-            gc.collect()
-            
-            return text_content
-            
-        except Exception as e:
-            logger.error(f"Failed to fetch 10-K for {ticker_or_name}: {str(e)}")
-            return None
-
+        raise ValueError(f"No SEC registered company found for '{clean}'.")
 
     def get_latest_10k_filing(self, ticker_or_name: str):
-        """Cheap call: returns (company, filing) without downloading the document body."""
+        """
+        Cheap call: returns (company, filing) without downloading the document.
+        Prefers original 10-K filings; falls back to a 10-K/A only if no original exists.
+        """
         company = self.resolve_company(ticker_or_name)
-        filings = company.get_filings(form="10-K")
-        if not filings:
-            return company, None
-        return company, filings[0]
+        logger.info(f"Resolved to company: {company.name}")
 
-    def get_filing_text(self, filing) -> Optional[str]:
-        """Expensive call: download + parse. Your existing truncation logic goes here."""
+        filings = None
         try:
-            text_content = filing.text()
-            original_len = len(text_content)
-            MAX_CHARS = 480_000
-            if original_len > MAX_CHARS:
-                text_content = text_content[:MAX_CHARS]
-                logger.info(f"Truncated filing from {original_len} to {MAX_CHARS} characters.")
-            else:
-                logger.info(f"Successfully retrieved 10-K ({original_len} characters).")
-            gc.collect()
-            return text_content
-        except Exception as e:
-            logger.error(f"Failed to parse filing: {e}")
+            filings = company.get_filings(form="10-K", amendments=False)
+        except TypeError:
+            # Older edgartools without the amendments argument
+            all_filings = company.get_filings(form="10-K")
+            originals = [f for f in all_filings if getattr(f, "form", "") == "10-K"]
+            if originals:
+                return company, originals[0]
+            filings = all_filings
+
+        if filings and len(filings) > 0:
+            return company, filings[0]
+
+        # Last resort: amendments (e.g. a company whose only annual filing is a 10-K/A)
+        amended = company.get_filings(form="10-K/A")
+        if amended and len(amended) > 0:
+            logger.warning(f"No original 10-K for {company.name}; using latest 10-K/A.")
+            return company, amended[0]
+
+        logger.warning(f"No 10-K filings found for {company.name}")
+        return company, None
+
+    def _text_from_attachments(self, filing) -> Optional[str]:
+        """Bypass edgartools' primary-document lookup by picking the main .htm ourselves."""
+        docs = [
+            a for a in filing.attachments
+            if str(getattr(a, "document", "")).lower().endswith((".htm", ".html"))
+            and not re.match(r"(?i)^(r\d+|ex)", str(getattr(a, "document", "")))
+        ]
+        main = next(
+            (a for a in docs if str(getattr(a, "document_type", "")).startswith("10-K")),
+            None,
+        )
+        if main is None and docs:
+            main = docs[0]
+        if main is None:
             return None
 
-# Singleton instance to be injected into the MCP server
+        raw = main.download() if hasattr(main, "download") else getattr(main, "content", None)
+        if raw is None:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", "ignore")
+        return _strip_html(raw)
+
+    def get_filing_text(self, filing) -> Optional[str]:
+        """Expensive call: download + parse. Returns capped plain text or None."""
+        strategies = [
+            ("text", lambda: filing.text()),
+            ("attachments", lambda: self._text_from_attachments(filing)),
+        ]
+
+        for attempt in range(2):
+            for name, getter in strategies:
+                try:
+                    text = getter()
+                except Exception as e:
+                    logger.warning(f"Filing parse via '{name}' failed (attempt {attempt + 1}): {e}")
+                    continue
+
+                if not text or len(text) < MIN_CHARS:
+                    if text:
+                        logger.warning(f"'{name}' returned only {len(text)} chars; too short, skipping.")
+                    continue
+
+                if len(text) > MAX_CHARS:
+                    logger.info(f"Truncated filing from {len(text)} to {MAX_CHARS} characters.")
+                    text = text[:MAX_CHARS]
+                else:
+                    logger.info(f"Retrieved 10-K via '{name}' ({len(text)} characters).")
+                gc.collect()
+                return text
+            time.sleep(2)  # brief pause before retrying, in case of throttling
+
+        return None
+
+    def fetch_latest_10k_text(self, ticker_or_name: str) -> Optional[str]:
+        """Backward-compatible wrapper for any code still calling the old method."""
+        try:
+            _, filing = self.get_latest_10k_filing(ticker_or_name)
+            return self.get_filing_text(filing) if filing else None
+        except Exception:
+            logger.exception(f"Failed to fetch 10-K for {ticker_or_name}")
+            return None
+
+
 edgar_client = EdgarDataClient()

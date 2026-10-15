@@ -54,24 +54,18 @@ class PineconeManager:
         except Exception as e:
             logger.warning(f"Could not delete namespace {namespace}: {e}")
 
-    def upsert_chunks(self, tenant_id: str, document_id: str, chunks: List[str],
-                      embeddings: List[List[float]], batch_size: int = 100):
+    def upsert_chunks(self, tenant_id: str, document_id: str, chunks: List[str],embeddings: List[List[float]], start_index: int = 0):
+        """Upsert ONE batch. IDs stay deterministic: {document_id}_chunk_{global index}."""
         vectors = [
             {
-                "id": f"{document_id}_chunk_{i}",
+                "id": f"{document_id}_chunk_{start_index + i}",
                 "values": emb,
                 "metadata": {"text": chunk, "document_id": document_id},
             }
             for i, (chunk, emb) in enumerate(zip(chunks, embeddings))
         ]
-
-        # Reverse batch order: the batch holding chunk_0 is written LAST,
-        # so chunk_0 existing means the whole document is in.
-        starts = list(range(0, len(vectors), batch_size))
-        for n, start in enumerate(reversed(starts), 1):
-            batch = vectors[start:start + batch_size]
-            self.index.upsert(vectors=batch, namespace=tenant_id)
-            logger.info(f"Upserted batch {n}/{len(starts)} (vectors {start} to {start + len(batch)})")
+        self.index.upsert(vectors=vectors, namespace=tenant_id)
+        logger.info(f"Upserted chunks {start_index} to {start_index + len(vectors)} into '{tenant_id}'")
 
         logger.info(f"Successfully upserted {len(vectors)} chunks into namespace '{tenant_id}' ({document_id})")
 

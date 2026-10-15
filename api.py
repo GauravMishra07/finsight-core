@@ -34,7 +34,7 @@ class ChatRequest(BaseModel):
 
 # --- API Endpoints ---
 @app.post("/api/v1/analyze")
-async def generate_memo(request: AnalyzeRequest):
+def generate_memo(request: AnalyzeRequest):
     """Triggers the LangGraph multi-agent pipeline."""
     try:
         tenant_id = f"tenant_{request.ticker.lower()}_api"
@@ -55,11 +55,17 @@ async def generate_memo(request: AnalyzeRequest):
         # Run LangGraph pipeline
         final_state = finsight_graph.invoke(initial_state)
 
+        if not final_state.get("filing_chunks_indexed"):
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not ingest the SEC filing: {final_state.get('errors')}",
+            )
         if not final_state.get("final_memo"):
             raise HTTPException(status_code=500, detail=str(final_state.get("errors")))
-
-        return final_state  # includes "errors" so the UI can show them as warnings
+        return final_state # includes "errors" so the UI can show them as warnings
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Analyze pipeline failed")
         raise HTTPException(status_code=500, detail=str(e))
@@ -108,6 +114,8 @@ async def chat_assistant(request: ChatRequest):
         
         return {"answer": response.choices[0].message.content}
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception("Chat pipeline failed")
+        logger.exception("Analyze pipeline failed")
         raise HTTPException(status_code=500, detail=str(e))

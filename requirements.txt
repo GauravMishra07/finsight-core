@@ -26,3 +26,4 @@ datasets
 #langchain-openai
 langchain-groq
 ddgs
+edgartools=5.53.0
