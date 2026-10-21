@@ -91,11 +91,21 @@ body {
 .md table { display: block; overflow-x: auto; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
 .md th, .md td { border: 1px solid var(--line); padding: 0.4rem 0.6rem; text-align: left; }
 .md th { background: var(--surface-2); font-weight: 600; }
+/* Tables scroll sideways instead of squashing: numbers stay on one line, the label column stays pinned. */
+.md th, .md td { overflow-wrap: normal; white-space: nowrap; }
+.md td:first-child, .md th:first-child { position: sticky; left: 0; z-index: 1; white-space: normal; min-width: 8rem; }
+.md td:first-child { background: var(--surface); }
+@media (max-width: 640px) {
+  .md table { font-size: 0.8rem; }
+  .md th, .md td { padding: 0.35rem 0.5rem; }
+}
 .md > :first-child { margin-top: 0; }
 
 @media print {
   body { background: #fff; color: #000; }
   .no-print { display: none !important; }
+  .md table { display: table; }
+  .md th, .md td { white-space: normal; position: static; }
   .print-only { display: block !important; }
   .md h2 { break-after: avoid; }
 }
@@ -104,9 +114,7 @@ body {
 .chat .md { font-size: 0.875rem; line-height: 1.6; }
 .chat .md h1, .chat .md h2, .chat .md h3 { font-size: 0.95rem; font-weight: 650; margin: 1rem 0 0.4rem; padding-top: 0; border-top: 0; }
 .chat .md table { font-size: 0.78rem; max-width: 100%; }
-.chat .md th, .chat .md td { padding: 0.3rem 0.45rem; white-space: nowrap; }
-.chat .md td:first-child, .chat .md th:first-child { position: sticky; left: 0; white-space: normal; min-width: 7rem; }
-.chat .md td:first-child { background: var(--surface); }
+.chat .md th, .chat .md td { padding: 0.3rem 0.45rem; }
 .chat .md li > p { margin: 0; }
 .chat-answer { max-width: 75ch; }
 @container (min-width: 36rem) {

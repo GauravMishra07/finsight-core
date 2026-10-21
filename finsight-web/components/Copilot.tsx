@@ -76,7 +76,7 @@ export default function Copilot({ report, open, onClose, width, onResize }: {
 
   return (
     <aside
-      className={`no-print relative flex-col border-line bg-surface lg:sticky lg:top-14 lg:flex lg:h-[calc(100dvh-3.5rem)] lg:border-l ${
+      className={`no-print flex-col border-line bg-surface lg:sticky lg:top-14 lg:flex lg:h-[calc(100dvh-3.5rem)] lg:border-l ${
         open ? "fixed inset-x-0 bottom-0 z-40 flex h-[85dvh] rounded-t-2xl border-t shadow-2xl" : "hidden"
       }`}
       aria-label="Research copilot"

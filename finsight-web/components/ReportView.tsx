@@ -148,7 +148,7 @@ export default function ReportView() {
         <div className="mt-6">
           {tab === "Dashboard" && <Dashboard metrics={report.financial_metrics ?? {}} />}
           {tab === "Memo" && (
-            <article className="max-w-3xl rounded-lg border border-line bg-surface p-6 sm:p-8 print:border-0 print:p-0">
+            <article className="max-w-3xl rounded-lg border border-line bg-surface p-4 sm:p-8 print:border-0 print:p-0">
               <Markdown>{memo}</Markdown>
             </article>
           )}
