@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* Chart + chrome tokens from the dataviz reference palette; dark values are their own steps. */
+:root {
+  color-scheme: light;
+  --bg: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f0efec;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --line: #e1e0d9;
+  --axis: #c3c2b7;
+  --accent: #2a78d6;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --good: #0ca30c;
+  --good-ink: #006300;
+  --warn: #fab219;
+  --crit: #d03b3b;
+}
+/* Dark: OS setting unless the toggle chose light; the toggle's choice wins both ways. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #262624;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --line: #2c2c2a;
+    --axis: #383835;
+    --accent: #3987e5;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --good-ink: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #262624;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --line: #2c2c2a;
+  --axis: #383835;
+  --accent: #3987e5;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --good-ink: #0ca30c;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-good: var(--good);
+  --color-good-ink: var(--good-ink);
+  --color-warn: var(--warn);
+  --color-crit: var(--crit);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.num { font-variant-numeric: tabular-nums; }
+
+/* Markdown (memo, copilot answers) */
+.md { line-height: 1.65; color: var(--ink); overflow-wrap: anywhere; }
+.md h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 1rem; letter-spacing: -0.01em; }
+.md h2 { font-size: 1.1rem; font-weight: 650; margin: 1.75rem 0 0.6rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.md h3 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+.md p, .md ul, .md ol, .md table, .md blockquote { margin: 0 0 0.85rem; }
+.md ul { list-style: disc; padding-left: 1.25rem; }
+.md ol { list-style: decimal; padding-left: 1.25rem; }
+.md li { margin: 0.2rem 0; }
+.md strong { font-weight: 650; }
+.md a { color: var(--accent); text-decoration: underline; }
+.md code { background: var(--surface-2); padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.9em; }
+.md blockquote { border-left: 3px solid var(--line); padding-left: 0.9rem; color: var(--ink-2); }
+.md table { display: block; overflow-x: auto; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+.md th, .md td { border: 1px solid var(--line); padding: 0.4rem 0.6rem; text-align: left; }
+.md th { background: var(--surface-2); font-weight: 600; }
+.md > :first-child { margin-top: 0; }
+
+@media print {
+  body { background: #fff; color: #000; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .md h2 { break-after: avoid; }
+}
+
+/* Copilot answers: sized by the panel's width (container queries), not the viewport. */
+.chat .md { font-size: 0.875rem; line-height: 1.6; }
+.chat .md h1, .chat .md h2, .chat .md h3 { font-size: 0.95rem; font-weight: 650; margin: 1rem 0 0.4rem; padding-top: 0; border-top: 0; }
+.chat .md table { font-size: 0.78rem; max-width: 100%; }
+.chat .md th, .chat .md td { padding: 0.3rem 0.45rem; white-space: nowrap; }
+.chat .md td:first-child, .chat .md th:first-child { position: sticky; left: 0; white-space: normal; min-width: 7rem; }
+.chat .md td:first-child { background: var(--surface); }
+.chat .md li > p { margin: 0; }
+.chat-answer { max-width: 75ch; }
+@container (min-width: 36rem) {
+  .chat .md { font-size: 0.9375rem; line-height: 1.65; }
+  .chat .md h1, .chat .md h2, .chat .md h3 { font-size: 1.02rem; }
+  .chat .md table { font-size: 0.85rem; }
+  .chat .md th, .chat .md td { padding: 0.4rem 0.65rem; }
+}

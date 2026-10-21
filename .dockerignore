@@ -1,0 +1,5 @@
+finsight-web/
+.venv/
+__pycache__/
+.git/
+.env

@@ -14,6 +14,7 @@ class AgentState(TypedDict):
     
     macro_analysis: Optional[str]
     competitor_analysis: Optional[str] # NEW: Stores competitor intel
+    competitors: Optional[List[Dict[str, Any]]]  # structured peers; listed ones carry XBRL history
     upcoming_projects: Optional[str] # NEW: Stores future initiatives
 
     

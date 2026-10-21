@@ -9,6 +9,7 @@ from src.agents.state import AgentState
 from src.rag.embedder import embedder
 from src.rag.vector_store import vector_store
 from src.mcp.tools.edgar_client import edgar_client
+from src.agents.risk_analyst import peer_metrics
 from config.settings import settings
 from config.logger import setup_logger
 
@@ -70,6 +71,50 @@ def _as_text(v, default):
     return str(v)
 
 
+MAX_PEERS = 4  # each peer costs ~4-8 small SEC requests
+
+
+def _competitors(raw) -> list:
+    """LLM competitor objects -> [{name, ticker, threat, overlap, note, sec_name?, metrics?}].
+    Up to MAX_PEERS listed peers get XBRL numbers. Never raises."""
+    rows = []
+    for c in raw if isinstance(raw, list) else []:
+        if isinstance(c, str):
+            c = {"name": c}
+        if not isinstance(c, dict) or not c.get("name"):
+            continue
+        threat = str(c.get("threat") or "").title()
+        ticker = c.get("ticker")
+        rows.append({
+            "name": str(c["name"]),
+            "ticker": ticker.strip().upper() if isinstance(ticker, str) and ticker.strip() else None,
+            "threat": threat if threat in ("High", "Medium", "Low") else None,
+            "overlap": str(c.get("overlap") or ""),
+            "note": str(c.get("note") or ""),
+        })
+    for r in [r for r in rows if r["ticker"]][:MAX_PEERS]:
+        try:
+            hit = peer_metrics(r["ticker"])
+        except Exception:
+            logger.exception(f"Peer metrics failed for {r['ticker']}")
+            hit = None
+        if hit:
+            r["sec_name"], r["metrics"] = hit
+    return rows
+
+
+def _competitor_text(rows: list) -> str:
+    """Markdown bullets of the structured rows (fed to the memo and the chat copilot)."""
+    if not rows:
+        return "No competitor data found."
+    lines = []
+    for r in rows:
+        head = f"**{r['name']}**" + (f" ({r['ticker']})" if r["ticker"] else "")
+        tags = " — ".join(t for t in (f"{r['threat']} threat" if r["threat"] else "", r["overlap"]) if t)
+        lines.append(f"- {head}{' — ' + tags if tags else ''}: {r['note']}")
+    return "\n".join(lines)
+
+
 def macro_reviewer_node(state: AgentState) -> dict:
     ticker = state.get("ticker")
     tenant_id = state.get("tenant_id")
@@ -100,7 +145,10 @@ def macro_reviewer_node(state: AgentState) -> dict:
     (a single object, not an array) with three keys:
 
     - "macro_analysis": A 2-paragraph summary of industry headwinds, regulatory risks, and current market sentiment based on the latest news.
-    - "competitors": A bulleted list of competitors mentioned and their market threat.
+    - "competitors": An array of up to 6 competitor objects, most threatening first, each with:
+      "name" (company name), "ticker" (its US stock ticker, or null if private or non-US listed),
+      "threat" ("High", "Medium" or "Low"), "overlap" (the segment or product where they compete, a few words),
+      "note" (one sentence on why they matter to this company's credit profile).
     - "projects": A detailed bulleted list of upcoming projects, R&D focus areas, and new product pipelines. Incorporate recent developments from the live news where available.
 
     If the live news says no results were found, rely on the SEC excerpts only and do not invent current events.
@@ -129,9 +177,11 @@ def macro_reviewer_node(state: AgentState) -> dict:
         if not isinstance(raw, dict):
             raw = {}
 
+        competitors = _competitors(raw.get("competitors"))
         return {
             "macro_analysis": _as_text(raw.get("macro_analysis"), "Not available."),
-            "competitor_analysis": _as_text(raw.get("competitors"), "No competitor data found."),
+            "competitors": competitors,
+            "competitor_analysis": _competitor_text(competitors),
             "upcoming_projects": _as_text(raw.get("projects"), "No project data found."),
         }
     except Exception as e:

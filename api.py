@@ -1,5 +1,6 @@
 # api.py
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 import sys
@@ -18,6 +19,12 @@ from config.logger import setup_logger
 logger = setup_logger(__name__)
 
 app = FastAPI(title="FinSight Underwriting API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 client = Groq(api_key=settings.groq_api_key)
 
 # --- Pydantic Data Models ---
@@ -33,6 +40,11 @@ class ChatRequest(BaseModel):
     financial_metrics: Dict[str, Any] = {}
 
 # --- API Endpoints ---
+@app.get("/health")
+def health():
+    """Cheap ping the frontend uses to wake Render's free tier."""
+    return {"status": "ok"}
+
 @app.post("/api/v1/analyze")
 def generate_memo(request: AnalyzeRequest):
     """Triggers the LangGraph multi-agent pipeline."""
@@ -47,6 +59,7 @@ def generate_memo(request: AnalyzeRequest):
             "risk_analysis": None,
             "macro_analysis": None,
             "competitor_analysis": None,
+            "competitors": [],
             "upcoming_projects": None,
             "final_memo": None,
             "errors": []
@@ -62,6 +75,7 @@ def generate_memo(request: AnalyzeRequest):
             )
         if not final_state.get("final_memo"):
             raise HTTPException(status_code=500, detail=str(final_state.get("errors")))
+        final_state.pop("raw_filing_text", None)  # ~50 KB the UI never uses
         return final_state # includes "errors" so the UI can show them as warnings
     
     except HTTPException:
@@ -87,7 +101,12 @@ async def chat_assistant(request: ChatRequest):
         # 2. Build Prompt (Inside api.py -> chat_assistant)
         system_prompt = f"""
         You are FinSight Copilot, an expert AI financial analyst.
-        
+
+        FORMAT (answers are read in a narrow side panel):
+        Lead with a one or two sentence answer. Then use short bullets or short paragraphs with **bold** key figures.
+        Use a Markdown table only for genuinely tabular numbers, with at most 4 columns and compact values ($24.9B, 18.2%).
+        Use ### for section headings, never # or ##. No preamble, and don't repeat the question.
+
         CRITICAL INSTRUCTION FOR FINANCIAL METRICS:
         Always use the following audited XBRL data for baseline quantitative questions (Revenue, Net Income, Assets, etc.):
         {request.financial_metrics}

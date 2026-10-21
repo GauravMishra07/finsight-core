@@ -13,6 +13,7 @@ from config.logger import setup_logger
 from groq import Groq
 import re
 from bs4 import BeautifulSoup
+from edgar import Company
 
 logger = setup_logger(__name__)
 client = Groq(api_key=settings.groq_api_key)
@@ -37,17 +38,13 @@ _session = requests.Session()
 _cache: dict = {}  # cik -> metrics_dict (in memory, tiny)
 
 
-def _fetch_concept(cik: int, tag: str, is_flow: bool):
-    """Latest annual (10-K, full-year) USD value for one tag. Response is a few KB."""
-    url = f"https://data.sec.gov/api/xbrl/companyconcept/CIK{int(cik):010d}/us-gaap/{tag}.json"
-    r = _session.get(url, headers={"User-Agent": IDENTITY}, timeout=20)
-    if r.status_code != 200:
-        return None
-    rows = r.json().get("units", {}).get("USD", [])
-    if not isinstance(rows, list) or not rows:
-       logger.warning(f"SEC XBRL {tag}: empty payload for CIK {cik}")
-       return None
-    annual = []
+HISTORY_YEARS = 5
+
+
+def _annual_series(rows: list, is_flow: bool) -> list:
+    """Last HISTORY_YEARS annual values, oldest first: [{"fy", "end", "val"}].
+    One row per period end; restatements resolve to the latest filing."""
+    by_end = {}
     for x in rows:
         if x.get("form") not in ("10-K", "10-K/A") or x.get("fp") != "FY":
             continue
@@ -58,11 +55,24 @@ def _fetch_concept(cik: int, tag: str, is_flow: bool):
                 continue
             if not 350 <= days <= 380:
                 continue
-        annual.append(x)
-    if not annual:
-        return None
-    latest = max(annual, key=lambda x: (x["end"], x.get("filed", "")))
-    return latest["val"]
+        prev = by_end.get(x["end"])
+        if prev is None or x.get("filed", "") >= prev.get("filed", ""):
+            by_end[x["end"]] = x
+    ends = sorted(by_end)[-HISTORY_YEARS:]
+    return [{"fy": e[:4], "end": e, "val": by_end[e]["val"]} for e in ends]
+
+
+def _fetch_concept(cik: int, tag: str, is_flow: bool) -> list:
+    """Annual (10-K, full-year) USD series for one tag. Response is a few KB."""
+    url = f"https://data.sec.gov/api/xbrl/companyconcept/CIK{int(cik):010d}/us-gaap/{tag}.json"
+    r = _session.get(url, headers={"User-Agent": IDENTITY}, timeout=20)
+    if r.status_code != 200:
+        return []
+    rows = r.json().get("units", {}).get("USD", [])
+    if not isinstance(rows, list) or not rows:
+       logger.warning(f"SEC XBRL {tag}: empty payload for CIK {cik}")
+       return []
+    return _annual_series(rows, is_flow)
 
 
 def _fmt(v):
@@ -155,11 +165,11 @@ def _metrics_from_filing_pages(ticker: str) -> dict:
         src_liab = src_bs
 
     return {
-        "Revenue": {"value": _fmt(revenue), "source": src_is},
-        "Net Income": {"value": _fmt(net_income), "source": src_is},
-        "Total Assets": {"value": _fmt(assets), "source": src_bs},
-        "Total Liabilities": {"value": _fmt(liabilities), "source": src_liab},
-        "Stockholders Equity": {"value": _fmt(equity), "source": src_bs},
+        "Revenue": {"value": _fmt(revenue), "source": src_is, "history": []},
+        "Net Income": {"value": _fmt(net_income), "source": src_is, "history": []},
+        "Total Assets": {"value": _fmt(assets), "source": src_bs, "history": []},
+        "Total Liabilities": {"value": _fmt(liabilities), "source": src_liab, "history": []},
+        "Stockholders Equity": {"value": _fmt(equity), "source": src_bs, "history": []},
     }
 
 def _get_metrics(ticker: str) -> dict:
@@ -167,17 +177,7 @@ def _get_metrics(ticker: str) -> dict:
     if cik in _cache:
         return _cache[cik]
 
-    out = {}
-    for label, source, tags, is_flow in METRICS:
-        val = None
-        for tag in tags:
-            try:
-                val = _fetch_concept(cik, tag, is_flow)
-            except Exception as e:
-                logger.warning(f"XBRL fetch failed for {tag}: {e}")
-            if val is not None:
-                break
-        out[label] = {"value": _fmt(val), "source": source}
+    out = _xbrl_metrics(cik)
 
     # Fallback: SEC concept API returned nothing (e.g. KO), so read the filing's statement pages
     if all(m["value"] == "N/A" for m in out.values()):
@@ -189,6 +189,34 @@ def _get_metrics(ticker: str) -> dict:
 
     if any(m["value"] != "N/A" for m in out.values()):
         _cache[cik] = out
+    return out
+
+
+def peer_metrics(ticker: str):
+    """(SEC name, XBRL metrics) for a competitor, or None. No filing-page fallback (too heavy per peer).
+    Exact ticker lookup only: the fuzzy name search can return the wrong company."""
+    try:
+        company = Company(ticker.strip().upper())
+        cik = int(company.cik)
+    except Exception:
+        return None
+    m = _cache.get(cik) or _xbrl_metrics(cik)
+    return (company.name, m) if any(v["history"] for v in m.values()) else None
+
+
+def _xbrl_metrics(cik: int) -> dict:
+    out = {}
+    for label, source, tags, is_flow in METRICS:
+        series = []
+        for tag in tags:
+            try:
+                series = _fetch_concept(cik, tag, is_flow)
+            except Exception as e:
+                logger.warning(f"XBRL fetch failed for {tag}: {e}")
+            if series:
+                break
+        val = series[-1]["val"] if series else None
+        out[label] = {"value": _fmt(val), "source": source, "history": series}
     return out
 
 

@@ -1,5 +1,6 @@
 version: '3.8'
 
+# Frontend (finsight-web/) is a static Next.js export: run it with `npm run dev` or deploy to Vercel.
 services:
   api:
     build:
@@ -9,23 +10,3 @@ services:
       - "8000:8000"
     env_file:
       - .env  # Injects your Groq/Pinecone API keys into the backend
-    networks:
-      - finsight-network
-
-  ui:
-    build:
-      context: .
-      dockerfile: Dockerfile.ui
-    ports:
-      - "8501:8501"
-    environment:
-      # Tells the UI container to route traffic to the API container
-      - API_BASE_URL=http://api:8000/api/v1 
-    depends_on:
-      - api
-    networks:
-      - finsight-network
-
-networks:
-  finsight-network:
-    driver: bridge

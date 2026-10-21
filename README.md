@@ -2,7 +2,7 @@
 
 FinSight is an enterprise-grade, multi-agent AI system designed to automate commercial credit underwriting and financial analysis. It ingests live government data (SEC 10-K filings), extracts audited financial metrics, performs semantic vector searches, fetches real-time market news, and synthesizes a professional credit memo. 
 
-The application features a decoupled architecture with a **FastAPI** backend powering a LangGraph state machine, and a **Streamlit** frontend for interactive dashboarding and AI chat capabilities.
+The application features a decoupled architecture with a **FastAPI** backend powering a LangGraph state machine, and a **Next.js** frontend (`finsight-web/`) with charts, memo export and a research copilot.
 
 ---
 
@@ -53,8 +53,9 @@ FinSight operates using a directed acyclic graph (DAG) of specialized AI agents.
 * **Real-Time Search:** `duckduckgo-search`
 
 **Frontend:**
-* **UI Framework:** [Streamlit](https://streamlit.io/)
-* **HTTP Client:** `requests`
+* **UI Framework:** [Next.js](https://nextjs.org/) (static export) + Tailwind CSS
+* **Charts:** Recharts
+* **Hosting:** Vercel (frontend), Render (backend)
 
 **DevOps:**
 * **Containerization:** Docker & Docker Compose
@@ -66,7 +67,6 @@ FinSight operates using a directed acyclic graph (DAG) of specialized AI agents.
 ```text
 finsight-core/
 ├── api.py                  # FastAPI Backend application
-├── app.py                  # Streamlit Frontend UI
 ├── config/
 │   ├── logger.py           # Standardized application logging
 │   └── settings.py         # Centralized .env configuration
@@ -83,11 +83,11 @@ finsight-core/
 │       ├── embedder.py     # Local HuggingFace embedding model
 │       └── vector_store.py # Pinecone connection and batch upserting
 ├── Dockerfile.api          # Backend container build instructions
-├── Dockerfile.ui           # Frontend container build instructions
-├── docker-compose.yml      # Multi-container orchestration
+├── finsight-web/           # Next.js frontend (deployed to Vercel)
+├── docker-compose.yml      # Local backend container
 ├── requirements.txt        # Python dependencies
 └── .env                    # Secret API keys (DO NOT COMMIT)
 
 
 ## RUN BACKEND uvicorn api:app --reload --port 8000  
-## RUN FRONTEND :python -m streamlit run app.py        
+## RUN FRONTEND: cd finsight-web && npm install && npm run dev        
