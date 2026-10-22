@@ -71,3 +71,19 @@ test("trend derives per-year ratios and growth; liabilities fall back to assets 
   assert.equal(p.fy, "2024");
   assert.equal(p.de, 3);
 });
+
+test("EBITDA margin per year and in peer rows; market cap reads the live value", () => {
+  const m: Metrics = {
+    Revenue: { value: "", source: "", history: pts(["2023", 100], ["2024", 200]) },
+    EBITDA: { value: "", source: "", history: pts(["2024", 50]) },
+    "Market Cap": { value: "$1,000", source: "", history: [], as_of: "2026-10-23" },
+  };
+  const [a, b] = trend(m);
+  assert.equal(a.ebitdaMargin, null);
+  assert.equal(b.ebitdaMargin, 0.25);
+  const p = peerRow("X", "X", m);
+  assert.equal(p.ebitda, 50);
+  assert.equal(p.ebitdaMargin, 0.25);
+  assert.equal(p.mcap, 1000);
+  assert.equal(peerRow("Y", "Y", {}).mcap, null); // old cached reports have neither field
+});

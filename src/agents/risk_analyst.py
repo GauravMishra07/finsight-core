@@ -74,6 +74,65 @@ def _fetch_concept(cik: int, tag: str, is_flow: bool) -> list:
     return _annual_series(rows, is_flow)
 
 
+# EBITDA isn't a GAAP tag, so it's derived: operating income + D&A.
+DA_TAGS = ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet",
+           "DepreciationAndAmortization", "DepreciationAmortizationAndOther", "Depreciation"]
+
+
+def _ebitda(cik: int) -> dict:
+    op, da = [], {}
+    try:
+        op = _fetch_concept(cik, "OperatingIncomeLoss", True)
+        for tag in DA_TAGS if op else []:
+            s = _fetch_concept(cik, tag, True)
+            if s and s[-1]["end"] == op[-1]["end"]:  # skip stale tags (AAPL's DepreciationAndAmortization ends in 2016)
+                da = {p["end"]: p["val"] for p in s}
+                break
+    except Exception as e:
+        logger.warning(f"EBITDA fetch failed for CIK {cik}: {e}")
+    series = [{**p, "val": p["val"] + da[p["end"]]} for p in op if p["end"] in da]
+    return {"value": _fmt(series[-1]["val"] if series else None),
+            "source": "Derived: SEC XBRL operating income + depreciation & amortization", "history": series}
+
+
+def _market_cap(cik: int, symbol: str | None) -> dict:
+    """Latest SEC shares outstanding x last traded price. Not cached: the price moves."""
+    out = {"value": "N/A", "source": "Shares outstanding (SEC) x last price (Yahoo Finance)", "history": []}
+    if not symbol:
+        return out
+    try:
+        shares = None
+        # dei is the 10-K/10-Q cover page; multi-class filers (GOOGL) only report it per class, so fall back to us-gaap
+        for tax, tag in (("dei", "EntityCommonStockSharesOutstanding"), ("us-gaap", "CommonStockSharesOutstanding")):
+            r = _session.get(f"https://data.sec.gov/api/xbrl/companyconcept/CIK{int(cik):010d}/{tax}/{tag}.json",
+                             headers={"User-Agent": IDENTITY}, timeout=20)
+            rows = r.json().get("units", {}).get("shares", []) if r.status_code == 200 else []
+            if rows:
+                shares = max(rows, key=lambda x: (x["end"], x.get("filed", "")))
+                break
+        if not shares:
+            return out
+        r = _session.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol.replace('.', '-')}",
+                         params={"range": "1d", "interval": "1d"}, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        meta = r.json()["chart"]["result"][0]["meta"]
+        if meta.get("currency") != "USD" or not meta.get("regularMarketPrice"):
+            return out
+        price, as_of = meta["regularMarketPrice"], date.fromtimestamp(meta["regularMarketTime"]).isoformat()
+        # Multi-class filers (BRK) report one class's count against another class's price; the SEC public
+        # float (non-affiliate value, usually most of the cap) catches that, so show N/A rather than a wrong number.
+        r = _session.get(f"https://data.sec.gov/api/xbrl/companyconcept/CIK{int(cik):010d}/dei/EntityPublicFloat.json",
+                         headers={"User-Agent": IDENTITY}, timeout=20)
+        floats = r.json().get("units", {}).get("USD", []) if r.status_code == 200 else []
+        if floats and shares["val"] * price < 0.2 * max(floats, key=lambda x: x["end"])["val"]:
+            logger.warning(f"Market cap for {symbol} fails the public-float check; share classes likely mismatched.")
+            return out
+        return {"value": _fmt(shares["val"] * price), "as_of": as_of, "history": [],
+                "source": f"{shares['val']:,} shares (SEC, {shares['end']}) x ${price:,.2f} ({symbol}, Yahoo Finance, {as_of})"}
+    except Exception as e:
+        logger.warning(f"Market cap failed for {symbol}: {e}")
+        return out
+
+
 def _fmt(v):
     return f"${v:,.0f}" if v is not None else "N/A"
 
@@ -172,9 +231,11 @@ def _metrics_from_filing_pages(ticker: str) -> dict:
     }
 
 def _get_metrics(ticker: str) -> dict:
-    cik = int(edgar_client.resolve_company(ticker).cik)
+    company = edgar_client.resolve_company(ticker)
+    cik = int(company.cik)
+    symbol = (getattr(company, "tickers", None) or [None])[0]
     if cik in _cache:
-        return _cache[cik]
+        return {**_cache[cik], "Market Cap": _market_cap(cik, symbol)}
 
     out = _xbrl_metrics(cik)
 
@@ -188,7 +249,7 @@ def _get_metrics(ticker: str) -> dict:
 
     if any(m["value"] != "N/A" for m in out.values()):
         _cache[cik] = out
-    return out
+    return {**out, "Market Cap": _market_cap(cik, symbol)}
 
 
 def peer_metrics(ticker: str):
@@ -200,7 +261,9 @@ def peer_metrics(ticker: str):
     except Exception:
         return None
     m = _cache.get(cik) or _xbrl_metrics(cik)
-    return (company.name, m) if any(v["history"] for v in m.values()) else None
+    if not any(v["history"] for v in m.values()):
+        return None
+    return company.name, {**m, "Market Cap": _market_cap(cik, ticker.strip().upper())}
 
 
 def _xbrl_metrics(cik: int) -> dict:
@@ -209,13 +272,16 @@ def _xbrl_metrics(cik: int) -> dict:
         series = []
         for tag in tags:
             try:
-                series = _fetch_concept(cik, tag, is_flow)
+                s = _fetch_concept(cik, tag, is_flow)
             except Exception as e:
                 logger.warning(f"XBRL fetch failed for {tag}: {e}")
-            if series:
-                break
+                continue
+            # Filers switch tags over time (NVDA's RevenueFromContract... stops in 2022), so keep the freshest series.
+            if s and (not series or s[-1]["end"] > series[-1]["end"]):
+                series = s
         val = series[-1]["val"] if series else None
         out[label] = {"value": _fmt(val), "source": source, "history": series}
+    out["EBITDA"] = _ebitda(cik)
     return out
 
 

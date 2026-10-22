@@ -6,7 +6,8 @@ import {
 } from "recharts";
 import { byYear, cagr, fmtRatio, latest, pct, ratios, trend, usd, yoy, type Metrics, type Ratio } from "@/lib/finance";
 
-const LABELS = ["Revenue", "Net Income", "Total Assets", "Total Liabilities", "Stockholders Equity"];
+const LABELS = ["Revenue", "Net Income", "EBITDA", "Total Assets", "Total Liabilities", "Stockholders Equity"];
+const TILES = ["Revenue", "Net Income", "EBITDA", "EBITDA Margin", "Total Assets", "Total Liabilities", "Stockholders Equity", "Market Cap"];
 const pctFmt = (n: number) => pct(n);
 const xFmt = (n: number) => `${n.toFixed(2)}x`;
 export const axis = { tick: { fill: "var(--muted)", fontSize: 12 }, tickLine: false, axisLine: { stroke: "var(--axis)" } } as const;
@@ -67,10 +68,44 @@ function Card({ title, sub, rows, cols, fmt, children }: {
   );
 }
 
-function KpiTiles({ m }: { m: Metrics }) {
+// Same look as the money tiles, but in % with the YoY change in percentage points.
+function MarginTile({ t }: { t: Trend[] }) {
+  const h = t.filter((r) => r.ebitdaMargin !== null).map((r) => ({ fy: r.fy, val: r.ebitdaMargin as number }));
+  if (!h.length) return null;
+  const last = h[h.length - 1], d = h.length >= 2 ? last.val - h[h.length - 2].val : null;
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-      {LABELS.map((label) => {
+    <div className="rounded-lg border border-line bg-surface p-4" title="EBITDA ÷ revenue">
+      <div className="text-xs text-muted">EBITDA Margin</div>
+      <div className="mt-1 text-2xl font-semibold tracking-tight">{pct(last.val)}</div>
+      <div className="mt-1 flex items-center gap-1 text-xs text-ink-2">
+        {d === null ? (
+          <span className="text-muted">FY{last.fy}</span>
+        ) : (
+          <>
+            {d >= 0 ? <ArrowUpRight size={14} aria-hidden /> : <ArrowDownRight size={14} aria-hidden />}
+            <span className="num">{`${d >= 0 ? "+" : ""}${(d * 100).toFixed(1)} pp`}</span> <span className="text-muted">YoY · FY{last.fy}</span>
+          </>
+        )}
+      </div>
+      {h.length >= 2 && (
+        <div className="mt-2 h-8" aria-hidden>
+          <ResponsiveContainer>
+            <LineChart data={h}>
+              <YAxis hide domain={["dataMin", "dataMax"]} />
+              <Line dataKey="val" stroke="var(--s1)" strokeWidth={2} dot={false} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KpiTiles({ m, t }: { m: Metrics; t: Trend[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {TILES.filter((label) => m[label] || label === "EBITDA Margin").map((label) => {
+        if (label === "EBITDA Margin") return <MarginTile key={label} t={t} />;
         const h = m[label]?.history ?? [];
         const d = yoy(h);
         return (
@@ -79,7 +114,7 @@ function KpiTiles({ m }: { m: Metrics }) {
             <div className="mt-1 text-2xl font-semibold tracking-tight">{usd(latest(m[label]))}</div>
             <div className="mt-1 flex items-center gap-1 text-xs text-ink-2">
               {d === null ? (
-                <span className="text-muted">{h.length ? `FY${h[h.length - 1].fy}` : "Latest 10-K"}</span>
+                <span className="text-muted">{h.length ? `FY${h[h.length - 1].fy}` : m[label]?.as_of ? `Live price · ${m[label].as_of}` : "Latest 10-K"}</span>
               ) : (
                 <>
                   {d >= 0 ? <ArrowUpRight size={14} aria-hidden /> : <ArrowDownRight size={14} aria-hidden />}
@@ -120,7 +155,7 @@ function RatioPanel({ items }: { items: Ratio[] }) {
     <section className="rounded-lg border border-line bg-surface p-4">
       <h3 className="font-semibold">Credit ratios</h3>
       <p className="text-xs text-muted">Latest fiscal year · generic bands, not sector-adjusted</p>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {items.map((r) => {
           const L = r.level ? LEVEL[r.level] : null;
           return (
@@ -146,6 +181,7 @@ type Trend = ReturnType<typeof trend>[number];
 const DERIVED: [string, keyof Trend, (n: number) => string][] = [
   ["Revenue growth", "growth", pctFmt],
   ["Net margin", "margin", pctFmt],
+  ["EBITDA margin", "ebitdaMargin", pctFmt],
   ["Return on equity", "roe", pctFmt],
   ["Return on assets", "roa", pctFmt],
   ["Debt / Equity", "de", xFmt],
@@ -196,12 +232,12 @@ function SummaryTable({ m, t }: { m: Metrics; t: Trend[] }) {
 
 export default function Dashboard({ metrics }: { metrics: Metrics }) {
   const pl = byYear(metrics, ["Revenue", "Net Income"]);
-  const margin = pl
-    .filter((r) => typeof r.Revenue === "number" && typeof r["Net Income"] === "number" && r.Revenue !== 0)
-    .map((r) => ({ fy: r.fy, "Net margin": (r["Net Income"] as number) / (r.Revenue as number) }));
   const cap = byYear(metrics, ["Total Liabilities", "Stockholders Equity"]);
-  const negMargin = margin.some((r) => r["Net margin"] < 0);
   const t = trend(metrics);
+  const margin: Row[] = t
+    .filter((r) => r.margin !== null || r.ebitdaMargin !== null)
+    .map((r) => ({ fy: r.fy, ...(r.margin !== null && { "Net margin": r.margin }), ...(r.ebitdaMargin !== null && { "EBITDA margin": r.ebitdaMargin }) }));
+  const negMargin = t.some((r) => (r.margin ?? 0) < 0 || (r.ebitdaMargin ?? 0) < 0);
   const growth = t.filter((r) => r.growth !== null).map((r) => ({ fy: r.fy, "Revenue growth": r.growth as number }));
   const returns: Row[] = t
     .filter((r) => r.roe !== null || r.roa !== null)
@@ -211,7 +247,7 @@ export default function Dashboard({ metrics }: { metrics: Metrics }) {
 
   return (
     <div className="space-y-4">
-      <KpiTiles m={metrics} />
+      <KpiTiles m={metrics} t={t} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Revenue and net income" sub="USD, fiscal years from 10-K XBRL" rows={pl.length >= 2 ? pl : []} cols={["Revenue", "Net Income"]} fmt={usd}>
           <ResponsiveContainer>
@@ -228,7 +264,7 @@ export default function Dashboard({ metrics }: { metrics: Metrics }) {
           </ResponsiveContainer>
         </Card>
 
-        <Card title="Net margin" sub="Net income ÷ revenue" rows={margin.length >= 2 ? margin : []} cols={["Net margin"]} fmt={(n) => pct(n)}>
+        <Card title="Margins" sub="EBITDA and net income ÷ revenue" rows={margin.length >= 2 ? margin : []} cols={["EBITDA margin", "Net margin"]} fmt={(n) => pct(n)}>
           <ResponsiveContainer>
             <LineChart data={margin} margin={{ left: 4, right: 12, top: 8 }}>
               <CartesianGrid vertical={false} stroke="var(--line)" />
@@ -236,7 +272,9 @@ export default function Dashboard({ metrics }: { metrics: Metrics }) {
               <YAxis {...axis} width={52} tickFormatter={(n) => pct(n, 0)} domain={negMargin ? ["auto", "auto"] : [0, "auto"]} />
               {negMargin && <ReferenceLine y={0} stroke="var(--axis)" />}
               <Tooltip content={<Tip fmt={(n) => pct(n)} />} cursor={{ stroke: "var(--axis)" }} />
-              <Line dataKey="Net margin" stroke="var(--s1)" strokeWidth={2} dot={{ r: 4, fill: "var(--s1)", stroke: "var(--surface)", strokeWidth: 2 }} activeDot={{ r: 5 }} />
+              <Legend verticalAlign="top" align="left" height={28} iconType="plainline" formatter={legend} />
+              <Line dataKey="EBITDA margin" stroke="var(--s1)" strokeWidth={2} dot={{ r: 4, fill: "var(--s1)", stroke: "var(--surface)", strokeWidth: 2 }} activeDot={{ r: 5 }} connectNulls />
+              <Line dataKey="Net margin" stroke="var(--s2)" strokeWidth={2} dot={{ r: 4, fill: "var(--s2)", stroke: "var(--surface)", strokeWidth: 2 }} activeDot={{ r: 5 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </Card>

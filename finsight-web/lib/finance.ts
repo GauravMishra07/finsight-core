@@ -1,5 +1,5 @@
 export type Point = { fy: string; end: string; val: number };
-export type Metric = { value: string; source: string; history?: Point[] };
+export type Metric = { value: string; source: string; history?: Point[]; as_of?: string }; // as_of: live values (Market Cap)
 export type Metrics = Record<string, Metric>;
 export type Verdict = "Approve" | "Review" | "Decline";
 
@@ -86,12 +86,13 @@ const num = (v: unknown) => (typeof v === "number" ? v : null);
 
 /** Ratios for every fiscal year in the history, oldest first, plus revenue growth. */
 export function trend(m: Metrics) {
-  const rows = byYear(m, ["Revenue", "Net Income", "Total Assets", "Total Liabilities", "Stockholders Equity"]);
+  const rows = byYear(m, ["Revenue", "Net Income", "Total Assets", "Total Liabilities", "Stockholders Equity", "EBITDA"]);
   return rows.map((r, i) => {
     const rev = num(r["Revenue"]), prev = i ? num(rows[i - 1]["Revenue"]) : null;
     return {
       fy: String(r.fy),
       growth: rev !== null && prev ? (rev - prev) / Math.abs(prev) : null,
+      ebitdaMargin: div(num(r["EBITDA"]), rev),
       ...derive({ rev, ni: num(r["Net Income"]), assets: num(r["Total Assets"]), liab: num(r["Total Liabilities"]), eq: num(r["Stockholders Equity"]) }),
     };
   });
@@ -110,18 +111,27 @@ export type Competitor = {
   sec_name?: string; metrics?: Metrics;
 };
 
-export type PeerRow = Derived & { name: string; ticker: string | null; fy: string | null; rev: number | null; growth: number | null; subject?: boolean };
+export type PeerRow = Derived & {
+  name: string; ticker: string | null; fy: string | null; rev: number | null; growth: number | null;
+  ebitda: number | null; ebitdaMargin: number | null; mcap: number | null; subject?: boolean;
+};
 
 export function peerRow(name: string, ticker: string | null, m: Metrics, subject = false): PeerRow {
   const h = m["Revenue"]?.history;
-  return { name, ticker, subject, fy: h?.length ? h[h.length - 1].fy : null, rev: latest(m["Revenue"]), growth: yoy(h), ...derive(latestVals(m)) };
+  const rev = latest(m["Revenue"]), ebitda = latest(m["EBITDA"]);
+  return {
+    name, ticker, subject, fy: h?.length ? h[h.length - 1].fy : null, rev, growth: yoy(h),
+    ebitda, ebitdaMargin: div(ebitda, rev), mcap: latest(m["Market Cap"]), ...derive(latestVals(m)),
+  };
 }
 
 export function ratios(m: Metrics): Ratio[] {
   const { de, margin, roa, roe, eqr } = derive(latestVals(m));
+  const em = div(latest(m["EBITDA"]), latest(m["Revenue"]));
   return [
     { label: "Debt / Equity", value: de, unit: "x", ...band(de, [1, 2], false, ["Low leverage", "Moderate leverage", "High leverage"]) },
     { label: "Net margin", value: margin, unit: "%", ...band(margin, [0.05, 0.15], true, ["Thin", "Healthy", "Strong"]) },
+    { label: "EBITDA margin", value: em, unit: "%", ...band(em, [0.1, 0.25], true, ["Thin", "Healthy", "Strong"]) },
     { label: "Return on assets", value: roa, unit: "%", ...band(roa, [0.02, 0.08], true, ["Weak", "Adequate", "Strong"]) },
     { label: "Return on equity", value: roe, unit: "%", ...band(roe, [0.08, 0.18], true, ["Weak", "Adequate", "Strong"]) },
     { label: "Equity ratio", value: eqr, unit: "%", ...band(eqr, [0.3, 0.5], true, ["Thin cushion", "Adequate", "Well capitalised"]) },

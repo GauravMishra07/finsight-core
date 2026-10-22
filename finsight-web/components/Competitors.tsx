@@ -25,8 +25,11 @@ function ThreatBadge({ threat }: { threat: Threat | null }) {
 const x = (n: number | null) => (n === null ? "N/A" : `${n.toFixed(2)}x`);
 const COLS: [string, (r: PeerRow) => string][] = [
   ["FY", (r) => r.fy ?? "—"],
+  ["Market cap", (r) => usd(r.mcap)],
   ["Revenue", (r) => usd(r.rev)],
   ["Rev. YoY", (r) => pct(r.growth)],
+  ["EBITDA", (r) => usd(r.ebitda)],
+  ["EBITDA margin", (r) => pct(r.ebitdaMargin)],
   ["Net margin", (r) => pct(r.margin)],
   ["ROE", (r) => pct(r.roe)],
   ["Debt / Equity", (r) => x(r.de)],
@@ -101,9 +104,12 @@ export default function Competitors({ ticker, metrics, competitors, fallback }: 
         <>
           <section className="rounded-lg border border-line bg-surface p-4">
             <h3 className="font-semibold">Peer comparison</h3>
-            <p className="text-xs text-muted">Latest fiscal year from each company&apos;s own 10-K XBRL. Fiscal year ends differ by company.</p>
+            <p className="text-xs text-muted">
+              Latest fiscal year from each company&apos;s own 10-K XBRL; fiscal year ends differ by company. EBITDA = operating
+              income + D&amp;A. Market cap = SEC shares outstanding × last price.
+            </p>
             <div className="mt-3 overflow-x-auto">
-              <table className="num w-full min-w-[640px] text-sm">
+              <table className="num w-full min-w-[880px] text-sm">
                 <thead className="text-xs text-muted">
                   <tr className="border-b border-line">
                     <th className="py-1.5 text-left font-medium">Company</th>
@@ -126,6 +132,8 @@ export default function Competitors({ ticker, metrics, competitors, fallback }: 
             <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-muted" aria-hidden /> Peers</span>
           </p>
           <div className="grid gap-4 lg:grid-cols-2">
+            <PeerChart title="Market cap" rows={rows} k="mcap" fmt={usd} tick={usd} />
+            <PeerChart title="EBITDA margin, latest FY" rows={rows} k="ebitdaMargin" fmt={(n) => pct(n)} tick={pctTick} />
             <PeerChart title="Revenue, latest FY" rows={rows} k="rev" fmt={usd} tick={usd} />
             <PeerChart title="Revenue growth, YoY" rows={rows} k="growth" fmt={(n) => pct(n)} tick={pctTick} />
             <PeerChart title="Net margin" rows={rows} k="margin" fmt={(n) => pct(n)} tick={pctTick} />
