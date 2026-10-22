@@ -19,8 +19,8 @@ npm run build          # must succeed: produces out/
 Backend (`.env` at repo root locally, never commit it; set the same keys in the Render dashboard for production): `GROQ_API_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX_NAME` (default `finsight-enterprise`), `DEFAULT_MODEL` (default `openai/gpt-oss-120b` on Groq), `EDGAR_IDENTITY` (SEC requires "Name email"), `ALLOWED_ORIGINS` (comma-separated exact origins, no trailing slash; default `http://localhost:3000`).
 Frontend: `NEXT_PUBLIC_API_BASE_URL` (e.g. `https://<service>.onrender.com/api/v1`). It is inlined at **build** time, so it must be set in the Vercel dashboard (redeploy after changing it) or in `finsight-web/.env.local` locally. The backend `.env` is not read by Next.js.
 
-## Pipeline (`src/agents/graph.py`, linear)
-extractor → risk_analyst → macro_reviewer → underwriter. Shared state: `src/agents/state.py` (`AgentState`; `errors` is append-only via `operator.add`).
+## Pipeline (`src/agents/graph.py`)
+extractor → (risk_analyst ∥ macro_reviewer, run in parallel) → underwriter. Shared state: `src/agents/state.py` (`AgentState`; `errors` is append-only via `operator.add`).
 - **extractor**: resolves the latest 10-K (`src/mcp/tools/edgar_client.py`), chunks it, embeds with Pinecone hosted inference (`multilingual-e5-large`, 1024-dim), and upserts to namespace `{TICKER}__{accession}`. Cache hit = `{doc}_chunk_0` exists, and chunk 0 is written **last**, so keep the reversed batch order.
 - **risk_analyst**: SEC `companyconcept` XBRL API → `financial_metrics[label] = {value: "$1,234", source, history: [{fy, end, val}]}` (last 5 FYs, oldest first). Falls back to scraping the statement pages (`history: []`). Then Groq writes a summary.
 - **macro_reviewer**: Pinecone search + DuckDuckGo (`ddgs`) news → macro, competitors, projects (JSON mode). `competitors` is a list of `{name, ticker, threat: High|Medium|Low|null, overlap, note}`; the first `MAX_PEERS` (4) with a ticker also get `sec_name` + `metrics` (same shape as `financial_metrics`, exact-ticker lookup only, no filing-page fallback). `competitor_analysis` is the Markdown rendering of that list.

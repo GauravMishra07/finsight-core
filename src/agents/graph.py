@@ -14,7 +14,7 @@ def build_finsight_graph():
     Constructs and compiles the FinSight multi-agent workflow graph.
     
     Flow:
-    [Start] -> Extractor -> Risk Analyst -> Macro Reviewer -> Underwriter -> [END]
+    [Start] -> Extractor -> (Risk Analyst || Macro Reviewer) -> Underwriter -> [END]
     """
     logger.info("Initializing FinSight multi-agent StateGraph...")
     
@@ -30,10 +30,12 @@ def build_finsight_graph():
     # 3. Define Entry Point
     workflow.set_entry_point("extractor")
     
-    # 4. Define Linear Edges
-    # Data flows strictly sequentially down the processing pipeline
+    # 4. Define Edges
+    # Risk and macro read only ticker/tenant_id and write disjoint keys, so they run in parallel;
+    # underwriter waits for both
     workflow.add_edge("extractor", "risk_analyst")
-    workflow.add_edge("risk_analyst", "macro_reviewer")
+    workflow.add_edge("extractor", "macro_reviewer")
+    workflow.add_edge("risk_analyst", "underwriter")
     workflow.add_edge("macro_reviewer", "underwriter")
     workflow.add_edge("underwriter", END)
     
