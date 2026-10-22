@@ -16,7 +16,7 @@ npm run build          # must succeed: produces out/
 ```
 
 ## Env vars
-Backend (`.env` at repo root locally, never commit it; set the same keys in the Render dashboard for production): `GROQ_API_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX_NAME` (default `finsight-enterprise`), `DEFAULT_MODEL` (default `openai/gpt-oss-120b` on Groq), `EDGAR_IDENTITY` (SEC requires "Name email"), `ALLOWED_ORIGINS` (comma-separated exact origins, no trailing slash; default `http://localhost:3000`).
+Backend (`.env` at repo root locally, never commit it; set the same keys in the Render dashboard for production): `GROQ_API_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX_NAME` (default `finsight-enterprise`), `DEFAULT_MODEL` (default `openai/gpt-oss-120b` on Groq; all LLM calls go through `config/llm.py:chat`, which silently falls back to `qwen/qwen3.8-27b` then `openai/gpt-oss-20b` on a 429), `EDGAR_IDENTITY` (SEC requires "Name email"), `ALLOWED_ORIGINS` (comma-separated exact origins, no trailing slash; default `http://localhost:3000`).
 Frontend: `NEXT_PUBLIC_API_BASE_URL` (e.g. `https://<service>.onrender.com/api/v1`). It is inlined at **build** time, so it must be set in the Vercel dashboard (redeploy after changing it) or in `finsight-web/.env.local` locally. The backend `.env` is not read by Next.js.
 
 ## Pipeline (`src/agents/graph.py`)

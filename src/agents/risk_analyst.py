@@ -10,13 +10,12 @@ from src.agents.state import AgentState
 from src.mcp.tools.edgar_client import edgar_client
 from config.settings import settings
 from config.logger import setup_logger
-from groq import Groq
+from config.llm import chat
 import re
 from bs4 import BeautifulSoup
 from edgar import Company
 
 logger = setup_logger(__name__)
-client = Groq(api_key=settings.groq_api_key)
 
 IDENTITY = os.environ.get("EDGAR_IDENTITY", "FinSight Agentic RAG (admin@finsight.local)")
 
@@ -244,12 +243,11 @@ def risk_analyst_node(state: AgentState) -> dict:
     """
 
     try:
-        response = client.chat.completions.create(
+        response = chat(
             messages=[
                 {"role": "system", "content": "You are a financial API returning valid JSON."},
                 {"role": "user", "content": prompt},
             ],
-            model=settings.default_model,
             response_format={"type": "json_object"},
             temperature=0.1,
         )

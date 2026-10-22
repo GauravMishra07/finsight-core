@@ -2,11 +2,10 @@
 from src.agents.state import AgentState
 from config.settings import settings
 from config.logger import setup_logger
-from groq import Groq
+from config.llm import chat
 import json
 
 logger = setup_logger(__name__)
-client = Groq(api_key=settings.groq_api_key)
 
 def underwriter_node(state: AgentState) -> dict:
     """
@@ -68,12 +67,11 @@ def underwriter_node(state: AgentState) -> dict:
         logger.info(f"[Underwriter Agent] Drafting final Credit Memo via Groq (Model: {settings.default_model})...")
         
         # Temperature is low for a factual, authoritative tone
-        response = client.chat.completions.create(
+        response = chat(
             messages=[
                 {"role": "system", "content": "You are a Lead Credit Officer writing Markdown memos."},
                 {"role": "user", "content": prompt}
             ],
-            model=settings.default_model,
             temperature=0.2 
         )
         

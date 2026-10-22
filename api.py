@@ -13,7 +13,7 @@ from src.agents.graph import finsight_graph
 from src.rag.embedder import embedder
 from src.rag.vector_store import vector_store
 from config.settings import settings
-from groq import Groq
+from config.llm import chat
 from config.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -25,7 +25,6 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
-client = Groq(api_key=settings.groq_api_key)
 
 # --- Pydantic Data Models ---
 class AnalyzeRequest(BaseModel):
@@ -125,8 +124,7 @@ async def chat_assistant(request: ChatRequest):
         messages_for_llm.append({"role": "user", "content": request.user_query})
 
         # 3. Call Groq
-        response = client.chat.completions.create(
-            model=settings.default_model,
+        response = chat(
             messages=messages_for_llm,
             temperature=0.2
         )

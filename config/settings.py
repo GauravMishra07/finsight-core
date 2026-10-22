@@ -15,7 +15,7 @@ class Settings:
     # Defaulting to finsight-enterprise as discussed, but falls back to .env if set
     pinecone_index_name: str = os.getenv("PINECONE_INDEX_NAME", "finsight-enterprise")
     
-    # We will use Llama 3 70B via Groq for high-quality financial analysis
+    # Primary Groq model; on 429 config/llm.py falls back to FALLBACK_MODELS
     default_model: str = os.getenv("DEFAULT_MODEL", "openai/gpt-oss-120b")
     
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379")
