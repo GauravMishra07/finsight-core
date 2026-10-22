@@ -37,9 +37,9 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-12 sm:py-20">
-      <p className="text-sm font-medium text-accent">For equity researchers and credit writers</p>
+      <p className="text-sm font-medium text-accent">Built for equity research and credit teams</p>
       <h1 className="mt-2 max-w-3xl text-3xl font-semibold tracking-tight sm:text-5xl">
-        From annual report to credit memo in about two minutes.
+        From annual report to credit memo in about 2 minutes.
       </h1>
       <p className="mt-4 max-w-2xl text-ink-2">
         Enter a ticker or company name. FinSight reads the latest SEC 10-K, extracts audited financials, checks the news,
