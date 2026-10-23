@@ -49,6 +49,7 @@ Changing these shapes means updating `finsight-web/lib/finance.ts` (types) and `
 # backend (from repo root)
 .venv/Scripts/python -m pytest tests/test_history.py   # or call the test functions directly; pytest isn't in requirements
 .venv/Scripts/python tests/test_competitors.py         # offline; peer lookup is stubbed
+.venv/Scripts/python -m tests.test_llm                 # offline; Groq retry/fallback with a stubbed client
 python tests/test_e2e.py                               # live: hits SEC, Pinecone, Groq
 # frontend (from finsight-web/)
 node --test lib/finance.test.ts                        # Node >= 22.18

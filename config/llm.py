@@ -13,6 +13,7 @@ client = Groq(api_key=settings.groq_api_key)
 # Groq rate limits are per model, so on a 429 we fall through to the next one.
 FALLBACK_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
 MAX_WAIT = 60  # free tier is 8k tokens/minute per model, so a short wait usually clears every model
+JSON_TRIES = 2  # per model, for Groq's sporadic json_validate_failed
 
 
 def _retry_after(e: RateLimitError) -> float:
@@ -31,18 +32,20 @@ def chat(**kwargs):
         waits, last_err = [], None
         for model in models:
             extra = {"reasoning_format": "hidden"} if model.startswith("qwen/") else {}  # keep <think> out of answers
-            try:
-                return client.chat.completions.create(model=model, **kwargs, **extra)
-            except RateLimitError as e:
-                waits.append(_retry_after(e))
-                last_err = e
-                logger.warning(f"Rate limited on {model}, trying the next model")
-            except BadRequestError as e:
-                # Smaller models sometimes return empty output in JSON mode; another model usually succeeds.
-                if "json_validate_failed" not in str(e):
-                    raise
-                last_err = e
-                logger.warning(f"{model} returned invalid JSON, trying the next model")
+            for json_try in range(JSON_TRIES):
+                try:
+                    return client.chat.completions.create(model=model, **kwargs, **extra)
+                except RateLimitError as e:
+                    waits.append(_retry_after(e))
+                    last_err = e
+                    logger.warning(f"Rate limited on {model}, trying the next model")
+                    break
+                except BadRequestError as e:
+                    # Models sometimes return empty output in JSON mode at random; a plain retry usually succeeds.
+                    if "json_validate_failed" not in str(e):
+                        raise
+                    last_err = e
+                    logger.warning(f"{model} returned invalid JSON (try {json_try + 1}/{JSON_TRIES})")
         if attempt == 0 and waits and min(waits) <= MAX_WAIT:
             logger.warning(f"All models busy; waiting {min(waits):.0f}s for the rate limit to reset")
             time.sleep(min(waits) + 1)
