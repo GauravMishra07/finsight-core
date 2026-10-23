@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
+import json
 import sys
 import os
 
@@ -44,28 +45,29 @@ def health():
     """Cheap ping the frontend uses to wake Render's free tier."""
     return {"status": "ok"}
 
+def initial_state(ticker: str) -> dict:
+    """Pipeline input; also used by evals/run_evals.py."""
+    return {
+        "tenant_id": f"tenant_{ticker.lower()}_api",
+        "ticker": ticker,
+        "raw_filing_text": None,
+        "filing_chunks_indexed": False,
+        "financial_metrics": {},
+        "risk_analysis": None,
+        "macro_analysis": None,
+        "competitor_analysis": None,
+        "competitors": [],
+        "upcoming_projects": None,
+        "final_memo": None,
+        "errors": []
+    }
+
 @app.post("/api/v1/analyze")
 def generate_memo(request: AnalyzeRequest):
     """Triggers the LangGraph multi-agent pipeline."""
     try:
-        tenant_id = f"tenant_{request.ticker.lower()}_api"
-        initial_state = {
-            "tenant_id": tenant_id,
-            "ticker": request.ticker,
-            "raw_filing_text": None,
-            "filing_chunks_indexed": False,
-            "financial_metrics": {},
-            "risk_analysis": None,
-            "macro_analysis": None,
-            "competitor_analysis": None,
-            "competitors": [],
-            "upcoming_projects": None,
-            "final_memo": None,
-            "errors": []
-        }
-        
         # Run LangGraph pipeline
-        final_state = finsight_graph.invoke(initial_state)
+        final_state = finsight_graph.invoke(initial_state(request.ticker))
 
         if not final_state.get("filing_chunks_indexed"):
             raise HTTPException(
@@ -75,6 +77,7 @@ def generate_memo(request: AnalyzeRequest):
         if not final_state.get("final_memo"):
             raise HTTPException(status_code=500, detail=str(final_state.get("errors")))
         final_state.pop("raw_filing_text", None)  # ~50 KB the UI never uses
+        final_state.pop("evidence", None)  # eval-only context, ~20 KB
         return final_state # includes "errors" so the UI can show them as warnings
     
     except HTTPException:
@@ -83,22 +86,20 @@ def generate_memo(request: AnalyzeRequest):
         logger.exception("Analyze pipeline failed")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/chat")
-async def chat_assistant(request: ChatRequest):
-    """Handles RAG-based follow-up questions."""
-    try:
-        # 1. Search Pinecone
-        query_emb = embedder.embed_query(request.user_query)
-        matches = vector_store.search(
-            tenant_id=request.tenant_id, 
-            query_embedding=query_emb, 
-            top_k=6
-        )
-        retrieved_context = "\n...\n".join([m["metadata"]["text"] for m in matches])
-        
-        # 2. Build Prompt
-        # 2. Build Prompt (Inside api.py -> chat_assistant)
-        system_prompt = f"""
+def answer_question(request: ChatRequest) -> tuple[str, list[str]]:
+    """(answer, contexts the model saw). Shared by the chat endpoint and evals/run_evals.py."""
+    # 1. Search Pinecone
+    query_emb = embedder.embed_query(request.user_query)
+    matches = vector_store.search(
+        tenant_id=request.tenant_id,
+        query_embedding=query_emb,
+        top_k=6
+    )
+    chunks = [m["metadata"]["text"] for m in matches]
+    retrieved_context = "\n...\n".join(chunks)
+
+    # 2. Build Prompt
+    system_prompt = f"""
         You are FinSight Copilot, an expert AI financial analyst.
 
         FORMAT (answers are read in a narrow side panel):
@@ -117,20 +118,27 @@ async def chat_assistant(request: ChatRequest):
         {request.memo_text[:3000]}
         """
 
-        messages_for_llm = [{"role": "system", "content": system_prompt}]
-        for msg in request.chat_history[-6:]:
-            messages_for_llm.append(msg)
-            
-        messages_for_llm.append({"role": "user", "content": request.user_query})
+    messages_for_llm = [{"role": "system", "content": system_prompt}]
+    for msg in request.chat_history[-6:]:
+        messages_for_llm.append(msg)
 
-        # 3. Call Groq
-        response = chat(
-            messages=messages_for_llm,
-            temperature=0.2
-        )
-        
-        return {"answer": response.choices[0].message.content}
+    messages_for_llm.append({"role": "user", "content": request.user_query})
 
+    # 3. Call Groq
+    response = chat(
+        messages=messages_for_llm,
+        temperature=0.2
+    )
+    contexts = chunks + [json.dumps(request.financial_metrics), request.memo_text[:3000]]
+    return response.choices[0].message.content, contexts
+
+
+@app.post("/api/v1/chat")
+async def chat_assistant(request: ChatRequest):
+    """Handles RAG-based follow-up questions."""
+    try:
+        answer, _ = answer_question(request)
+        return {"answer": answer}
     except HTTPException:
         raise
     except Exception as e:

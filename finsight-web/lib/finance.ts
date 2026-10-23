@@ -141,7 +141,7 @@ export function ratios(m: Metrics): Ratio[] {
 /** Reads the verdict from the memo's "Final Underwriting Recommendation" section. */
 export function verdictFromMemo(memo: string | undefined): Verdict | null {
   if (!memo) return null;
-  const i = memo.search(/#+\s*Final Underwriting Recommendation/i);
+  const i = memo.search(/#+\s*(\d+\.\s*)?Final Underwriting Recommendation/i); // LLM sometimes numbers headings
   if (i < 0) return null;
   const body = memo.slice(i).split("\n").slice(1).join("\n"); // skip the heading, which lists all three options
   const hit = body.match(/\b(approve|approved|approval|decline|declined|review)\b/i)?.[1].toLowerCase();

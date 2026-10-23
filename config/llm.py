@@ -2,6 +2,7 @@
 import time
 
 from groq import BadRequestError, Groq, RateLimitError
+from langsmith import traceable
 
 from config.logger import setup_logger
 from config.settings import settings
@@ -21,6 +22,7 @@ def _retry_after(e: RateLimitError) -> float:
         return MAX_WAIT
 
 
+@traceable(run_type="llm", name="groq_chat")  # no-op unless LANGSMITH_TRACING=true
 def chat(**kwargs):
     """client.chat.completions.create with silent model fallback on rate limits.
     If every model is rate limited, waits for the soonest reset (<= MAX_WAIT) and tries all once more."""

@@ -45,6 +45,7 @@ test("verdict ignores the heading's option list", () => {
   assert.equal(verdictFromMemo(memo), "Decline");
   assert.equal(verdictFromMemo("## Final Underwriting Recommendation\nRecommendation: **Approved**"), "Approve");
   assert.equal(verdictFromMemo("no section"), null);
+  assert.equal(verdictFromMemo("## 4. Final Underwriting Recommendation\n**Review** with conditions."), "Review");
 });
 
 const pts = (...v: [string, number][]) => v.map(([fy, val]) => ({ fy, end: "", val }));

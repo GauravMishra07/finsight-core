@@ -181,6 +181,7 @@ def macro_reviewer_node(state: AgentState) -> dict:
             "competitors": competitors,
             "competitor_analysis": _competitor_text(competitors),
             "upcoming_projects": _as_text(raw.get("projects"), "No project data found."),
+            "evidence": [retrieved_context, realtime_news],
         }
     except Exception as e:
         logger.exception("Macro reviewer failed")

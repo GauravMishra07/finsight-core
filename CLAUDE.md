@@ -54,3 +54,11 @@ python tests/test_e2e.py                               # live: hits SEC, Pinecon
 node --test lib/finance.test.ts                        # Node >= 22.18
 npm run lint && npm run build
 ```
+
+## Evals (`evals/`, excluded from the Render image)
+`python -m evals.run_evals --suite memo|chat|retrieval|all [--no-judge] [--no-upload]`; offline checks: `python -m evals.test_metrics`. Deps in `evals/requirements-eval.txt` (never add ragas/openai to `requirements.txt`). See README "Evals".
+- Judge defaults to free `qwen/qwen3.8-27b` on Groq + Pinecone embeddings (`EVAL_JUDGE=gemini` → free `gemini-3.8-flash` with `GEMINI_API_KEY`; `EVAL_JUDGE=openai` → `gpt-4o-mini`; `JUDGE_MODEL` overrides); LangSmith upload only when `LANGSMITH_API_KEY` is set. `config/llm.py:chat` is `@traceable` (no-op unless `LANGSMITH_TRACING=true`).
+- Pipeline outputs are cached in `evals/.cache/{TICKER}.json`; `--fresh` re-runs them.
+- `golden.json` is pinned to a filing accession per ticker; the runner warns when a newer 10-K exists, so refresh the references then.
+- The pipeline state carries `evidence` (the macro reviewer's SEC excerpts + news) for evals; `api.py` pops it before responding. `api.answer_question` is shared by `/chat` and the chat eval, so prompt changes are evaluated as shipped.
+- `evals/metrics.py:verdict_from_memo` is a port of `lib/finance.ts:verdictFromMemo`; change both together.

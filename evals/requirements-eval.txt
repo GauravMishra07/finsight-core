@@ -1,0 +1,5 @@
+# Eval-only dependencies; never installed on Render (evals/ is in .dockerignore).
+-r ../requirements.txt
+ragas==0.4.3
+langsmith==0.11.1
+openai==3.3.0

@@ -130,3 +130,24 @@ cd finsight-web && npm install && npm run dev   # http://localhost:3000
 python tests/test_e2e.py                         # live: hits SEC, Pinecone, Groq
 cd finsight-web && node --test lib/finance.test.ts
 ```
+
+## 📏 Evals (RAGAS + LangSmith)
+
+`evals/` scores the three outputs users see against a hand-checked golden set (`evals/golden.json`: MSFT, KO, TSLA; 10 questions each, numbers verified against SEC XBRL, text answers tied to a verbatim 10-K phrase).
+
+| Suite | Metrics |
+|---|---|
+| `memo` | numeric grounding, metric accuracy, headings, verdict parsed/stability (deterministic); memo / risk / macro faithfulness, verdict justified, gaps acknowledged (RAGAS judge) |
+| `chat` | faithfulness, answer relevancy, factual correctness; refusal on unanswerable questions |
+| `retrieval` | hit@3/6/10/15, MRR (deterministic); context precision, context recall (RAGAS judge) |
+
+```bash
+.venv/Scripts/python -m pip install -r evals/requirements-eval.txt
+.venv/Scripts/python -m evals.test_metrics                       # offline checks
+.venv/Scripts/python -m evals.run_evals --suite all              # full run
+.venv/Scripts/python -m evals.run_evals --suite retrieval --no-judge   # deterministic only, fastest
+```
+
+Flags: `--tickers MSFT,KO`, `--repeats 3` (re-runs the underwriter for verdict stability), `--fresh` (re-run the pipeline instead of using `evals/.cache/`), `--no-judge`, `--no-upload`.
+Judge: free by default, `qwen/qwen3.8-27b` on Groq (reuses `GROQ_API_KEY`; the free tier is slow, about 1k output tokens/min, and shares quota with the app) with Pinecone embeddings. `EVAL_JUDGE=gemini` uses `gemini-3.8-flash` on Google AI Studio's free tier (`GEMINI_API_KEY`, no card needed, but only 20 requests/day: enough for a `--tickers` subset, not a full run). `EVAL_JUDGE=openai` switches to `gpt-4o-mini` (needs `OPENAI_API_KEY` with credit); `JUDGE_MODEL` overrides the model. Env (local `.env` only): optionally `LANGSMITH_API_KEY` + `LANGSMITH_TRACING=true` + `LANGSMITH_PROJECT=finsight` to log each run as a LangSmith experiment and trace every agent step. Reports are written to `evals/.cache/report-<suite>.json`.
+Starting targets: faithfulness ≥ 0.85, numeric grounding = 1.0, context recall ≥ 0.8, hit@6 ≥ 0.8.

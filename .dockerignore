@@ -3,3 +3,4 @@ finsight-web/
 __pycache__/
 .git/
 .env
+evals/

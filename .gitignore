@@ -4,6 +4,9 @@
 env/
 venv/
 
+# Eval pipeline outputs and reports
+evals/.cache/
+
 # Python artifacts
 __pycache__/
 *.py[cod]
