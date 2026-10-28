@@ -1,4 +1,5 @@
 // Every number on screen comes from the cached pipeline runs and the app's own finance helpers.
+// shortcut: evals/.cache is git-ignored, so a fresh clone must run `python -m evals.run_evals --suite memo --no-judge --tickers MSFT,KO,TSLA` first; switch to finsight-web/public/samples if that gets in the way.
 import msft from "../../evals/.cache/MSFT.json";
 import ko from "../../evals/.cache/KO.json";
 import tsla from "../../evals/.cache/TSLA.json";
