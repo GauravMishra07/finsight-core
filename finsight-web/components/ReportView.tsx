@@ -9,7 +9,7 @@ import Copilot, { CHAT_DEFAULT } from "./Copilot";
 import Dashboard from "./Dashboard";
 import Markdown from "./Markdown";
 import VerdictBadge from "./VerdictBadge";
-import { analyze } from "@/lib/api";
+import { analyze, getSample } from "@/lib/api";
 import { getReport, saveReport } from "@/lib/store";
 import { verdictFromMemo, type Report } from "@/lib/finance";
 
@@ -63,7 +63,19 @@ export default function ReportView() {
     if (!ticker) return;
     const cached = getReport(ticker);
     setReport(cached ?? null);
-    if (!cached) return run();
+    if (cached) return;
+    // Not in this browser yet: a shipped sample opens instantly; anything else runs the pipeline.
+    let live = true;
+    let stop: (() => void) | undefined;
+    getSample(ticker).then((s) => {
+      if (!live) return;
+      if (s) setReport(s);
+      else stop = run();
+    });
+    return () => {
+      live = false;
+      stop?.();
+    };
   }, [ticker, run]);
 
   if (!ticker) return <Empty msg="No ticker given." />;
@@ -103,6 +115,7 @@ export default function ReportView() {
             <p className="mt-1 text-xs text-muted">
               Latest SEC 10-K{accession ? ` · accession ${accession}` : ""}
               {report.savedAt ? ` · generated ${new Date(report.savedAt).toLocaleString()}` : ""}
+              {report.sample && " · pre-generated sample, Re-run for a live analysis"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

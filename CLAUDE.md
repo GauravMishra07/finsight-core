@@ -42,6 +42,7 @@ Changing these shapes means updating `finsight-web/lib/finance.ts` (types) and `
 ## Frontend notes
 - `components/ReportView.tsx` is the workspace: tabs, export (copy, .md, print-to-PDF) and the docked `Copilot`. `components/Dashboard.tsx` holds the KPI tiles, charts and ratio panel. All finance math is in `lib/finance.ts`.
 - Colours are CSS tokens in `app/globals.css` (dataviz reference palette, separate dark steps). Charts use `var(--s1)`/`var(--s2)` only. Status colours (good/warn/crit) always come with an icon and a label. No dual-axis charts.
+- Preset tickers open instantly from pre-generated reports in `public/samples/{TICKER}.json` (`lib/api.ts:getSample`, tried before `/analyze`). Refresh them with `.venv/Scripts/python -m scripts.build_samples` (live run, ~1 min per ticker) and keep its `PRESETS` in sync with `app/page.tsx`.
 - Everything is a client component. Static export means no API routes, no server actions and no `next/image` optimisation.
 
 ## Tests

@@ -27,6 +27,12 @@ async function call<T>(url: string, init: RequestInit, timeoutMs: number): Promi
 /** Render's free tier sleeps after 15 min idle; one ping wakes it (~50 s). */
 export const wake = () => call<{ status: string }>(HEALTH, { method: "GET" }, 90_000).then(() => true);
 
+/** Pre-generated report shipped with the site (scripts/build_samples.py), or null. Opens presets instantly while the backend sleeps. */
+export const getSample = (ticker: string): Promise<Report | null> =>
+  fetch(`/samples/${encodeURIComponent(ticker.toUpperCase())}.json`)
+    .then((r) => (r.ok ? (r.json() as Promise<Report>) : null))
+    .catch(() => null);
+
 const inFlight = new Map<string, Promise<Report>>();
 
 /** Runs the 4-agent pipeline. Concurrent calls for one ticker share a request so the 512 MB backend never runs it twice. */

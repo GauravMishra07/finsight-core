@@ -83,6 +83,9 @@ export default function Home() {
           </button>
         ))}
       </div>
+      <p className="mt-2 text-xs text-muted">
+        These open instantly as pre-generated reports. Any other ticker runs the live pipeline (about 2 minutes).
+      </p>
 
       {recent.length > 0 && (
         <section className="mt-12">
