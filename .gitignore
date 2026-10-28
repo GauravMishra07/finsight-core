@@ -15,11 +15,6 @@ __pycache__/
 # OS generated files
 .DS_Store
 Thumbs.db
-# promo video project
-promo/node_modules/
-promo/out/
 
-promo/.venv/
-promo/public/captures/
-promo/public/voice/
-promo/public/music.wav
+# promo video project (kept locally, not in the repo)
+promo/
