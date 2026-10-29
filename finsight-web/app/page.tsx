@@ -84,7 +84,7 @@ export default function Home() {
         ))}
       </div>
       <p className="mt-2 text-xs text-muted">
-        These open instantly as pre-generated reports. Any other ticker runs the live pipeline (about 2 minutes).
+        These open instantly as pre-generated reports. Any other US-listed ticker (S&P 500 and other SEC filers) runs the live pipeline (about 2 minutes).
       </p>
 
       {recent.length > 0 && (

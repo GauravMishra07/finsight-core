@@ -40,7 +40,7 @@ class ChatRequest(BaseModel):
     financial_metrics: Dict[str, Any] = {}
 
 # --- API Endpoints ---
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])  # HEAD: UptimeRobot's free monitors ping with HEAD
 def health():
     """Cheap ping the frontend uses to wake Render's free tier."""
     return {"status": "ok"}
